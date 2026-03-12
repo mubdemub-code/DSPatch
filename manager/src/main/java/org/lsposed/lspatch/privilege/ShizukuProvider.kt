@@ -15,7 +15,6 @@ class ShizukuProvider(private val context: Context) : IPrivilegeProvider {
     override fun execShellCommand(command: String): String? {
         if (!isAvailable()) return null
         return try {
-            // Correction : On passe par "sh -c" pour exécuter la commande texte
             val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
             process.inputStream.bufferedReader().use { it.readText() }
         } catch (e: Exception) {

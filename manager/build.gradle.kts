@@ -116,7 +116,7 @@ dependencies {
     implementation(lspatch.rikka.shizuku.provider)
     
     // --- AJOUT POUR DSPATCH : DHIZUKU API ---
-    implementation("com.github.iamr0s:Dhizuku-API:2.4.1")
+    implementation("io.github.iamr0s:Dhizuku-API:2.5")
     
     implementation(lspatch.rikka.refine)
     implementation(lspatch.raamcosta.compose.destinations)

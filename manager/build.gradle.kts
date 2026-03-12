@@ -110,8 +110,14 @@ dependencies {
     implementation(lspatch.google.accompanist.swiperefresh)
     implementation(libs.material)
     implementation(libs.gson)
+    
+    // --- Dépendances Shizuku (Originales) ---
     implementation(lspatch.rikka.shizuku.api)
     implementation(lspatch.rikka.shizuku.provider)
+    
+    // --- AJOUT POUR DSPATCH : DHIZUKU API ---
+    implementation("io.github.iamr0s:Dhizuku-API:2.4.1")
+    
     implementation(lspatch.rikka.refine)
     implementation(lspatch.raamcosta.compose.destinations)
     implementation(libs.appiconloader)

@@ -13,6 +13,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // AJOUT STRICT NÉCESSAIRE POUR DHIZUKU
+        maven("https://jitpack.io")
     }
     versionCatalogs {
         create("libs") {

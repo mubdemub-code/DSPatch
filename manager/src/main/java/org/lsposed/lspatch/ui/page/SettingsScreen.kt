@@ -36,6 +36,8 @@ import org.lsposed.lspatch.ui.component.settings.SettingsSwitch
 import org.lsposed.lspatch.lspApp
 import org.lsposed.lspatch.util.DhizukuApi
 import org.lsposed.lspatch.util.ShizukuApi
+import org.lsposed.lspatch.util.findActivity   // fonction utilitaire pour récupérer l'Activity depuis un Context
+import org.lsposed.lspatch.ui.util.LocalSnackbarHost
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
@@ -73,6 +75,7 @@ fun SettingsScreen() {
 private fun InstallMethodSelector() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snackbarHost = LocalSnackbarHost.current
 
     // prefs from global application
     val prefs = lspApp.prefs
@@ -108,44 +111,51 @@ private fun InstallMethodSelector() {
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_AUTO).apply()
             expanded = false
         })
-        
         DropdownMenuItem(text = { Text("Shizuku (use Shizuku explicitly)") }, onClick = {
             current = INSTALL_SHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_SHIZUKU).apply()
             expanded = false
-            // Optionally request permission immediately if binder available:
+            // Demander la permission Shizuku si nécessaire
             if (ShizukuApi.isBinderAvailable && !ShizukuApi.isPermissionGranted) {
                 try {
-                    // request from the UI thread; if you want a request code, adapt it
                     rikka.shizuku.Shizuku.requestPermission(114514)
                 } catch (_: Throwable) { /* ignore if request not possible */ }
             }
         })
-        
         DropdownMenuItem(text = { Text("Dhizuku (use Dhizuku explicitly)") }, onClick = {
             current = INSTALL_DHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_DHIZUKU).apply()
             expanded = false
-            
-            // Initialisation de Dhizuku et demande explicite de permission
-            try { 
-                DhizukuApi.init(context)
-                
-                // On utilise directement l'API Dhizuku pour vérifier et demander la permission
-                if (!com.rosan.dhizuku.api.Dhizuku.isPermissionGranted()) {
-                    com.rosan.dhizuku.api.Dhizuku.requestPermission { _, _ -> 
-                        // Callback optionnel une fois la réponse obtenue (succès ou échec)
+
+            // Demander la permission Dhizuku si disponible et non accordée
+            if (DhizukuApi.isAvailable && !DhizukuApi.isPermissionGranted) {
+                val activity = context.findActivity()
+                DhizukuApi.requestPermission(activity) { granted ->
+                    scope.launch {
+                        val message = if (granted) {
+                            "Permission Dhizuku accordée"
+                        } else {
+                            "Permission Dhizuku refusée"
+                        }
+                        snackbarHost.showSnackbar(message)
                     }
                 }
-            } catch (e: Throwable) { 
-                e.printStackTrace()
+            } else if (!DhizukuApi.isAvailable) {
+                scope.launch {
+                    snackbarHost.showSnackbar("Dhizuku n'est pas installé ou disponible")
+                }
+            } else {
+                // Déjà accordé, on peut afficher un message si souhaité
+                scope.launch {
+                    snackbarHost.showSnackbar("Dhizuku déjà autorisé")
+                }
             }
         })
-        
         DropdownMenuItem(text = { Text("Root (use root if available)") }, onClick = {
             current = INSTALL_ROOT
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_ROOT).apply()
             expanded = false
+            // Pour root, pas de demande de permission particulière
         })
     }
 }

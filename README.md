@@ -1,42 +1,53 @@
-# LSPatch Framework
+# 🛡️ Imperium Framework
 
-[![Build](https://img.shields.io/github/actions/workflow/status/JingMatrix/LSPatch/main.yml?branch=master&logo=github&label=Build&event=push)](https://github.com/JingMatrix/LSPatch/actions/workflows/main.yml?query=event%3Apush+is%3Acompleted+branch%3Amaster) [![Crowdin](https://img.shields.io/badge/Localization-Crowdin-blueviolet?logo=Crowdin)](https://crowdin.com/project/lspatch_jingmatrix) [![Download](https://img.shields.io/github/v/release/JingMatrix/LSPatch?color=orange&logoColor=orange&label=Download&logo=DocuSign)](https://github.com/JingMatrix/LSPatch/releases/latest) [![Total](https://shields.io/github/downloads/JingMatrix/LSPatch/total?logo=Bookmeter&label=Counts&logoColor=yellow&color=yellow)](https://github.com/JingMatrix/LSPatch/releases)
+> **Total authority over Android application patching.**
+> Une solution de gestion de patchs nouvelle génération fusionnant la puissance de **Dhizuku** et la flexibilité de **LSPatch**.
 
-## Introduction 
+[![Build](https://img.shields.io/github/actions/workflow/status/mubdemub-code/ImperiumFramework/main.yml?branch=master&logo=github&label=Build)](https://github.com/mubdemub-code/ImperiumFramework/actions)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](./LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-1.9+-purple?logo=kotlin)](https://kotlinlang.org/)
 
-Rootless implementation of LSPosed framework, integrating Xposed API by inserting dex and so into the target APK.
+---
 
-## Supported Versions
+### ✨ Points Forts
 
-- Min: Android 9
-- Max: In theory, same with [LSPosed](https://github.com/JingMatrix/LSPosed#supported-versions)
+* **⚡ Souveraineté Système** : Exploite l'API Dhizuku (Device Owner) pour des installations silencieuses sans Root.
+* **🔄 Moteur Hybride** : Basculement intelligent entre **Dhizuku → Shizuku → Root**.
+* **🎨 UI Moderne** : Interface fluide sous **Material 3** et Jetpack Compose.
+* **🔑 Signature Custom** : Gestion intégrée des keystores pour signer vos APKs patchés.
+* **📝 Logs en Temps Réel** : Suivi détaillé de l'injection pour un débogage facilité.
 
-## Download
+---
 
-For stable releases, please go to [Github Releases page](https://github.com/JingMatrix/LSPatch/releases)
-For canary build, please check [Github Actions](https://github.com/JingMatrix/LSPatch/actions)
-Note: debug builds are only available in Github Actions
+### 🚀 Démarrage Rapide
 
-## Usage
+**Prérequis :** Android 9+ | Dhizuku ou Shizuku installé | Débogage activé.
 
-+ Through jar
-1. Download `lspatch.jar`
-1. Run `java -jar lspatch.jar`
+1. **Installer** : Téléchargez l'APK depuis les [Releases](https://github.com/mubdemub-code/ImperiumFramework/releases).
+2. **Configurer** : Dans les paramètres, sélectionnez votre méthode (Dhizuku recommandé).
+3. **Autoriser** : Validez la demande de privilèges Device Owner / ADB.
 
-+ Through manager
-1. Download and install `manager.apk` on an Android device
-1. Follow the instructions of the manager app
+---
 
-## Translation Contributing
+### 🛠 Stack Technique
 
-You can contribute translation [here](https://crowdin.com/project/lspatch_jingmatrix).
+| Composant | Technologie |
+| :--- | :--- |
+| **Langage** | Kotlin (Coroutines & Flow) |
+| **UI Framework** | Jetpack Compose / Material 3 |
+| **Privilèges** | Dhizuku API & Shizuku |
+| **Core Engine** | LSPatch Core |
+| **Architecture** | MVI / Clean Architecture |
 
-## Credits
+---
 
-- [LSPosed](https://github.com/JingMatrix/LSPosed): Core framework
-- [Xpatch](https://github.com/WindySha/Xpatch): Fork source
-- [Apkzlib](https://android.googlesource.com/platform/tools/apkzlib): Repacking tool
+### ⚠️ Sécurité
+Imperium manipule des privilèges de bas niveau. L'utilisation des fonctions "Device Owner" relève de votre responsabilité. Le développeur n'est pas responsable des dommages matériels ou pertes de données.
 
-## License
+---
 
-LSPatch is licensed under the **GNU General Public License v3 (GPL-3)** (http://www.gnu.org/copyleft/gpl.html).
+### 🤝 Contribution & License
+Les PR sont les bienvenues ! 
+1. **Fork** → 2. **Branch** → 3. **Commit** → 4. **Pull Request**.
+
+Distribué sous licence **GPL-3.0**. Développé avec passion par **MUB**.

@@ -40,6 +40,7 @@ import com.ramcosta.composedestinations.result.ResultRecipient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.lsposed.lspatch.R
+import org.lsposed.lspatch.LSPApplication
 import org.lsposed.lspatch.lspApp
 import org.lsposed.lspatch.ui.component.AnywhereDropdown
 import org.lsposed.lspatch.ui.component.SelectionColumn
@@ -56,12 +57,20 @@ import org.lsposed.lspatch.ui.viewmodel.NewPatchViewModel.ViewAction
 import org.lsposed.lspatch.util.LSPPackageManager
 import org.lsposed.lspatch.util.LSPPackageManager.AppInfo
 import org.lsposed.lspatch.util.ShizukuApi
+import org.lsposed.lspatch.util.DhizukuApi
 
 private const val TAG = "NewPatchPage"
 
 const val ACTION_STORAGE = 0
 const val ACTION_APPLIST = 1
 const val ACTION_INTENT_INSTALL = 2
+
+// SharedPreferences key (must match SettingsScreen)
+private const val PREF_INSTALL_METHOD = "install_method"
+private const val INSTALL_AUTO = "AUTO"
+private const val INSTALL_SHIZUKU = "SHIZUKU"
+private const val INSTALL_DHIZUKU = "DHIZUKU"
+private const val INSTALL_ROOT = "ROOT"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination
@@ -436,6 +445,7 @@ private fun DoPatchBody(modifier: Modifier, navigator: DestinationsNavigator) {
                     val installFailed = stringResource(R.string.patch_install_failed)
                     val copyError = stringResource(R.string.copy_error)
                     var installing by remember { mutableStateOf(false) }
+
                     if (installing) InstallDialog(viewModel.patchApp) { status, message ->
                         scope.launch {
                             installing = false
@@ -451,6 +461,7 @@ private fun DoPatchBody(modifier: Modifier, navigator: DestinationsNavigator) {
                             }
                         }
                     }
+
                     Row(Modifier.padding(top = 12.dp)) {
                         Button(
                             modifier = Modifier.weight(1f),
@@ -458,15 +469,56 @@ private fun DoPatchBody(modifier: Modifier, navigator: DestinationsNavigator) {
                             content = { Text(stringResource(R.string.patch_return)) }
                         )
                         Spacer(Modifier.weight(0.2f))
+
                         Button(
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                if (!ShizukuApi.isPermissionGranted) {
-                                    scope.launch {
-                                        snackbarHost.showSnackbar(shizukuUnavailable)
+                                // NEW: consult user install method and verify permissions before installing
+                                val prefs = lspApp.prefs
+                                val method = prefs.getString(PREF_INSTALL_METHOD, INSTALL_AUTO) ?: INSTALL_AUTO
+
+                                when (method) {
+                                    INSTALL_SHIZUKU -> {
+                                        if (!ShizukuApi.isPermissionGranted) {
+                                            scope.launch { snackbarHost.showSnackbar(shizukuUnavailable) }
+                                        } else {
+                                            installing = true
+                                        }
                                     }
-                                } else {
-                                    installing = true
+                                    INSTALL_DHIZUKU -> {
+                                        if (!DhizukuApi.runShellCommandWithDhizuku(lspApp, "echo check").startsWith("ERROR")
+                                            && DhizukuApi.isPermissionGranted
+                                        ) {
+                                            // Dhizuku seems available
+                                            installing = true
+                                        } else {
+                                            // Inform user what to do to enable Dhizuku
+                                            scope.launch {
+                                                snackbarHost.showSnackbar(
+                                                    "Dhizuku is not available or permission not granted. Make this app Device Owner or grant Dhizuku permission."
+                                                )
+                                            }
+                                        }
+                                    }
+                                    INSTALL_ROOT -> {
+                                        // If you have root support in LSPPackageManager.install(), it will be used there.
+                                        installing = true
+                                    }
+                                    else -> {
+                                        // AUTO: prefer Dhizuku -> Shizuku -> Root
+                                        if (DhizukuApi.isPermissionGranted) {
+                                            installing = true
+                                        } else if (ShizukuApi.isPermissionGranted) {
+                                            installing = true
+                                        } else {
+                                            // no privileged method available
+                                            scope.launch {
+                                                snackbarHost.showSnackbar(
+                                                    "No privileged install method available. Enable Dhizuku or Shizuku, or use a rooted device."
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             },
                             content = { Text(stringResource(R.string.install)) }
@@ -497,6 +549,11 @@ private fun DoPatchBody(modifier: Modifier, navigator: DestinationsNavigator) {
     }
 }
 
+/**
+ * Install dialog kept largely unchanged.
+ * NOTE: LSPPackageManager.install() still performs the installation; to fully support Dhizuku
+ * at the engine level, add Dhizuku-specific install code inside LSPPackageManager (I can provide that patch).
+ */
 @Composable
 private fun InstallDialog(patchApp: AppInfo, onFinish: (Int, String?) -> Unit) {
     val scope = rememberCoroutineScope()

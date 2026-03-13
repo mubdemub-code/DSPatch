@@ -4,11 +4,11 @@
     <string name="installing">Installing</string>
     <string name="uninstall">Uninstall</string>
     <string name="uninstalling">Uninstalling</string>
-<string name="settings_install_method">Install method</string>
     <string name="copy_error">Copy error</string>
     <string name="apps">Apps</string>
     <string name="modules">Modules</string>
     <string name="shizuku_available">Shizuku service available</string>
+<string name="settings_install_method">Méthode d\'installation</string>
     <string name="shizuku_unavailable">Shizuku service not connected</string>
     <string name="screen_repo">Repo</string>
     <string name="screen_logs">Logs</string>

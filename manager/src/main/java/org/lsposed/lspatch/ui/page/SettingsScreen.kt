@@ -1,5 +1,8 @@
 package org.lsposed.lspatch.ui.page
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -26,14 +29,13 @@ import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import kotlinx.coroutines.launch
 import org.lsposed.lspatch.R
-import org.lsposed.lspatch.LSPApplication
 import org.lsposed.lspatch.config.Configs
 import org.lsposed.lspatch.config.MyKeyStore
+import org.lsposed.lspatch.lspApp
 import org.lsposed.lspatch.ui.component.AnywhereDropdown
 import org.lsposed.lspatch.ui.component.CenterTopBar
 import org.lsposed.lspatch.ui.component.settings.SettingsItem
 import org.lsposed.lspatch.ui.component.settings.SettingsSwitch
-import org.lsposed.lspatch.lspApp
 import org.lsposed.lspatch.util.DhizukuApi
 import org.lsposed.lspatch.util.ShizukuApi
 import java.io.IOException
@@ -115,7 +117,6 @@ private fun InstallMethodSelector() {
             // Optionally request permission immediately if binder available:
             if (ShizukuApi.isBinderAvailable && !ShizukuApi.isPermissionGranted) {
                 try {
-                    // request from the UI thread; if you want a request code, adapt it
                     rikka.shizuku.Shizuku.requestPermission(114514)
                 } catch (_: Throwable) { /* ignore if request not possible */ }
             }
@@ -124,8 +125,12 @@ private fun InstallMethodSelector() {
             current = INSTALL_DHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_DHIZUKU).apply()
             expanded = false
-            // Optionally initialize Dhizuku SDK to prompt user in other parts of the app
-            try { DhizukuApi.init(context) } catch (_: Throwable) {}
+
+            // Demander la permission Dhizuku si elle n'est pas déjà accordée
+            if (!DhizukuApi.isPermissionGranted && DhizukuApi.isAvailable) {
+                val activity = context.findActivity()
+                DhizukuApi.requestPermission(activity)
+            }
         })
         DropdownMenuItem(text = { Text("Root (use root if available)") }, onClick = {
             current = INSTALL_ROOT
@@ -320,4 +325,14 @@ private fun DetailPatchLogs() {
         icon = Icons.Outlined.BugReport,
         title = stringResource(R.string.settings_detail_patch_logs)
     )
+}
+
+// Fonction utilitaire pour récupérer l'Activity depuis un Context
+fun Context.findActivity(): Activity {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    throw IllegalStateException("No Activity found")
 }

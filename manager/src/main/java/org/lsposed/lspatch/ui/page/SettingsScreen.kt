@@ -108,6 +108,7 @@ private fun InstallMethodSelector() {
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_AUTO).apply()
             expanded = false
         })
+        
         DropdownMenuItem(text = { Text("Shizuku (use Shizuku explicitly)") }, onClick = {
             current = INSTALL_SHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_SHIZUKU).apply()
@@ -120,13 +121,27 @@ private fun InstallMethodSelector() {
                 } catch (_: Throwable) { /* ignore if request not possible */ }
             }
         })
+        
         DropdownMenuItem(text = { Text("Dhizuku (use Dhizuku explicitly)") }, onClick = {
             current = INSTALL_DHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_DHIZUKU).apply()
             expanded = false
-            // Optionally initialize Dhizuku SDK to prompt user in other parts of the app
-            try { DhizukuApi.init(context) } catch (_: Throwable) {}
+            
+            // Initialisation de Dhizuku et demande explicite de permission
+            try { 
+                DhizukuApi.init(context)
+                
+                // On utilise directement l'API Dhizuku pour vérifier et demander la permission
+                if (!com.rosan.dhizuku.api.Dhizuku.isPermissionGranted()) {
+                    com.rosan.dhizuku.api.Dhizuku.requestPermission { _, _ -> 
+                        // Callback optionnel une fois la réponse obtenue (succès ou échec)
+                    }
+                }
+            } catch (e: Throwable) { 
+                e.printStackTrace()
+            }
         })
+        
         DropdownMenuItem(text = { Text("Root (use root if available)") }, onClick = {
             current = INSTALL_ROOT
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_ROOT).apply()

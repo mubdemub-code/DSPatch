@@ -14,6 +14,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.runBlocking
 import org.lsposed.lspatch.IDhizukuService
+import java.lang.reflect.Proxy
 
 /**
  * DhizukuApi - thin wrapper to:
@@ -62,16 +63,23 @@ object DhizukuApi {
     fun requestPermission(activity: android.app.Activity, callback: (Boolean) -> Unit) {
         try {
             val clazz = Class.forName("com.rosan.dhizuku.api.Dhizuku")
-            val mRequest = clazz.getMethod(
-                "requestPermission",
-                com.rosan.dhizuku.api.DhizukuRequestPermissionCallback::class.java
-            )
+            val callbackClass = Class.forName("com.rosan.dhizuku.api.DhizukuRequestPermissionCallback")
+            val mRequest = clazz.getMethod("requestPermission", callbackClass)
 
-            // Création du callback via le SDK (réflexion)
-            val proxy = com.rosan.dhizuku.api.DhizukuRequestPermissionCallback { _, resultCode ->
-                val granted = resultCode == android.content.pm.PackageManager.PERMISSION_GRANTED
-                isPermissionGranted = granted
-                callback(granted)
+            // Création d'un proxy dynamique pour l'interface de callback
+            val proxy = Proxy.newProxyInstance(
+                callbackClass.classLoader,
+                arrayOf(callbackClass)
+            ) { _, method, args ->
+                // On suppose que la méthode de callback reçoit deux paramètres,
+                // le second étant le code de résultat (int)
+                if (method.parameterCount == 2 && args?.size == 2) {
+                    val resultCode = args[1] as? Int ?: -1
+                    val granted = resultCode == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    isPermissionGranted = granted
+                    callback(granted)
+                }
+                null
             }
 
             mRequest.invoke(null, proxy)

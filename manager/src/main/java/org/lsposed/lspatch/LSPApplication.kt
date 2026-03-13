@@ -10,8 +10,9 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import org.lsposed.lspatch.manager.AppBroadcastReceiver
 import org.lsposed.lspatch.util.LSPPackageManager
 import org.lsposed.lspatch.util.ShizukuApi
+import org.lsposed.lspatch.util.DhizukuApi
 import java.io.File
-import com.rosan.dhizuku.api.Dhizuku
+
 lateinit var lspApp: LSPApplication
 
 class LSPApplication : Application() {
@@ -22,28 +23,30 @@ class LSPApplication : Application() {
     val globalScope = CoroutineScope(Dispatchers.Default)
 
     override fun onCreate() {
-    super.onCreate()
+        super.onCreate()
 
-    HiddenApiBypass.addHiddenApiExemptions("")
+        HiddenApiBypass.addHiddenApiExemptions("")
 
-    lspApp = this
-    filesDir.mkdir()
+        lspApp = this
+        filesDir.mkdir()
+        tmpApkDir = cacheDir.resolve("apk").also { it.mkdir() }
+        prefs = lspApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    tmpApkDir = cacheDir.resolve("apk").also { it.mkdir() }
+        // Init Shizuku (existing logic)
+        ShizukuApi.init(this)
 
-    prefs = lspApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        // Init Dhizuku via our wrapper (reflection safe).
+        // If you prefer to call the SDK directly, add the SDK dependency and replace by Dhizuku.init(this).
+        try {
+            DhizukuApi.init(this)
+        } catch (_: Throwable) {
+            // silence: Dhizuku not present or init failed, DhizukuApi.init sets flags accordingly
+        }
 
-    // Shizuku init
-    ShizukuApi.init(this)
+        AppBroadcastReceiver.register(this)
 
-    // Dhizuku init
-    try {
-        com.rosan.dhizuku.api.Dhizuku.init(this)
-    } catch (_: Throwable) {}
-
-    AppBroadcastReceiver.register(this)
-
-    globalScope.launch {
-        LSPPackageManager.fetchAppList()
+        globalScope.launch {
+            LSPPackageManager.fetchAppList()
+        }
     }
 }

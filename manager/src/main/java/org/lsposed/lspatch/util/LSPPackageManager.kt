@@ -33,12 +33,31 @@ import java.util.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
+/**
+ * LSPPackageManager (modifié)
+ *
+ * Ajoute le support Dhizuku en priorité si l'utilisateur l'a choisi ou si AUTO le détecte.
+ * L'implémentation Dhizuku installe les APKs patchés présents dans lspApp.tmpApkDir via
+ * DhizukuApi.installApk(context, apkPath).
+ *
+ * Remarque : ce fichier suppose l'existence d'un DhizukuApi dans le même package :
+ *  - DhizukuApi.isPermissionGranted: Boolean
+ *  - DhizukuApi.installApk(context, apkPath): String
+ *  - DhizukuApi.runShellCommandWithDhizuku(context, cmd): String
+ */
 object LSPPackageManager {
 
     private const val TAG = "LSPPackageManager"
     private const val SETTINGS_CATEGORY = "de.robv.android.xposed.category.MODULE_SETTINGS"
 
     const val STATUS_USER_CANCELLED = -2
+
+    // Preference keys / values used by SettingsScreen & NewPatchScreen
+    private const val PREF_INSTALL_METHOD = "install_method"
+    private const val INSTALL_AUTO = "AUTO"
+    private const val INSTALL_SHIZUKU = "SHIZUKU"
+    private const val INSTALL_DHIZUKU = "DHIZUKU"
+    private const val INSTALL_ROOT = "ROOT"
 
     @Parcelize
     class AppInfo(val app: ApplicationInfo, val label: String) : Parcelable {
@@ -79,12 +98,95 @@ object LSPPackageManager {
         }
     }
 
+    /**
+     * Helper: install patched APKs using Dhizuku.
+     * Returns Pair<status, message> similar to the original install() contract.
+     */
+    private fun installWithDhizuku(): Pair<Int, String?> {
+        try {
+            val tmp = lspApp.tmpApkDir
+            val apkFiles = tmp.listFiles()?.filter { it.name.endsWith(Constants.PATCH_FILE_SUFFIX) } ?: emptyList()
+            if (apkFiles.isEmpty()) {
+                return Pair(PackageInstaller.STATUS_FAILURE, "No patched apk found in ${tmp.absolutePath}")
+            }
+
+            // Install each APK (splits handled naively: fail on first failure)
+            apkFiles.forEach { apk ->
+                val resp = try {
+                    // call DhizukuApi which should execute "pm install -r <apk>"
+                    DhizukuApi.installApk(lspApp, apk.absolutePath)
+                } catch (t: Throwable) {
+                    return Pair(PackageInstaller.STATUS_FAILURE, "Dhizuku install exception: ${t.message}\n${t.stackTraceToString()}")
+                }
+
+                // DhizukuApi returns a formatted string. Treat "Success" or EXIT_CODE:0 as success.
+                if (resp.contains("EXIT_CODE:0") || resp.contains("Success", ignoreCase = true)) {
+                    // ok continue to next (or finish if last)
+                } else {
+                    // failure: return failure with message
+                    return Pair(PackageInstaller.STATUS_FAILURE, resp)
+                }
+            }
+
+            // if we reach here, all installs succeeded
+            return Pair(PackageInstaller.STATUS_SUCCESS, "Success")
+        } catch (e: Exception) {
+            return Pair(PackageInstaller.STATUS_FAILURE, "Exception: ${e.message}\n${e.stackTraceToString()}")
+        }
+    }
+
+    /**
+     * Helper: uninstall via Dhizuku by calling "pm uninstall <package>"
+     * Returns Pair<status, message>
+     */
+    private fun uninstallWithDhizuku(packageName: String): Pair<Int, String?> {
+        return try {
+            val resp = DhizukuApi.runShellCommandWithDhizuku(lspApp, "pm uninstall $packageName")
+            if (resp.contains("EXIT_CODE:0") || resp.contains("Success", ignoreCase = true)) {
+                Pair(PackageInstaller.STATUS_SUCCESS, "Success")
+            } else {
+                Pair(PackageInstaller.STATUS_FAILURE, resp)
+            }
+        } catch (t: Throwable) {
+            Pair(PackageInstaller.STATUS_FAILURE, "Exception: ${t.message}\n${t.stackTraceToString()}")
+        }
+    }
+
+    /**
+     * Install patched apks — now supports Dhizuku if enabled/available, otherwise falls back to Shizuku.
+     */
     suspend fun install(): Pair<Int, String?> {
         Log.i(TAG, "Perform install patched apks")
         var status = PackageInstaller.STATUS_FAILURE
         var message: String? = null
+
         withContext(Dispatchers.IO) {
             runCatching {
+                // Read user's preferred install method
+                val prefs = lspApp.prefs
+                val method = prefs.getString(PREF_INSTALL_METHOD, INSTALL_AUTO) ?: INSTALL_AUTO
+
+                // Decide backend based on preference + availability
+                val tryDhizukuFirst = when (method) {
+                    INSTALL_DHIZUKU -> true
+                    INSTALL_SHIZUKU -> false
+                    INSTALL_ROOT -> false
+                    else -> true // AUTO -> prefer Dhizuku
+                }
+
+                // If preference explicitly SHIZUKU, skip Dhizuku
+                if (tryDhizukuFirst && DhizukuApi.isPermissionGranted) {
+                    val (s, m) = installWithDhizuku()
+                    status = s
+                    message = m
+                    if (status == PackageInstaller.STATUS_SUCCESS) return@runCatching
+                    // else fallback to Shizuku below
+                } else if (method == INSTALL_DHIZUKU && !DhizukuApi.isPermissionGranted) {
+                    // user selected Dhizuku explicitly but it's not available
+                    throw IOException("Dhizuku not available or permission not granted")
+                }
+
+                // Fallback / Shizuku path (original code)
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
                 var flags = Refine.unsafeCast<SessionParamsHidden>(params).installFlags
                 flags = flags or PackageManagerHidden.INSTALL_ALLOW_TEST or PackageManagerHidden.INSTALL_REPLACE_EXISTING
@@ -123,14 +225,40 @@ object LSPPackageManager {
                 message = it.message + "\n" + it.stackTraceToString()
             }
         }
+
         return Pair(status, message)
     }
 
+    /**
+     * Uninstall package — attempt Dhizuku first (if chosen/available), otherwise use Shizuku path.
+     */
     suspend fun uninstall(packageName: String): Pair<Int, String?> {
         var status = PackageInstaller.STATUS_FAILURE
         var message: String? = null
         withContext(Dispatchers.IO) {
             runCatching {
+                val prefs = lspApp.prefs
+                val method = prefs.getString(PREF_INSTALL_METHOD, INSTALL_AUTO) ?: INSTALL_AUTO
+
+                val preferDhizuku = when (method) {
+                    INSTALL_DHIZUKU -> true
+                    INSTALL_SHIZUKU -> false
+                    INSTALL_ROOT -> false
+                    else -> true // AUTO prefers Dhizuku
+                }
+
+                if (preferDhizuku && DhizukuApi.isPermissionGranted) {
+                    val (s, m) = uninstallWithDhizuku(packageName)
+                    status = s
+                    message = m
+                    if (status == PackageInstaller.STATUS_SUCCESS) return@runCatching
+                    // else fallback to Shizuku below
+                } else if (method == INSTALL_DHIZUKU && !DhizukuApi.isPermissionGranted) {
+                    // explicit Dhizuku requested but not available
+                    throw IOException("Dhizuku not available or permission not granted")
+                }
+
+                // Shizuku uninstall (existing)
                 var result: Intent? = null
                 suspendCoroutine { cont ->
                     val adapter = IntentSenderHelper.IIntentSenderAdaptor { intent ->

@@ -1,5 +1,8 @@
 package org.lsposed.lspatch.ui.page
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -26,18 +29,16 @@ import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import kotlinx.coroutines.launch
 import org.lsposed.lspatch.R
-import org.lsposed.lspatch.LSPApplication
 import org.lsposed.lspatch.config.Configs
 import org.lsposed.lspatch.config.MyKeyStore
+import org.lsposed.lspatch.lspApp
 import org.lsposed.lspatch.ui.component.AnywhereDropdown
 import org.lsposed.lspatch.ui.component.CenterTopBar
 import org.lsposed.lspatch.ui.component.settings.SettingsItem
 import org.lsposed.lspatch.ui.component.settings.SettingsSwitch
-import org.lsposed.lspatch.lspApp
+import org.lsposed.lspatch.ui.util.LocalSnackbarHost
 import org.lsposed.lspatch.util.DhizukuApi
 import org.lsposed.lspatch.util.ShizukuApi
-import org.lsposed.lspatch.util.findActivity   // fonction utilitaire pour récupérer l'Activity depuis un Context
-import org.lsposed.lspatch.ui.util.LocalSnackbarHost
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
@@ -129,7 +130,7 @@ private fun InstallMethodSelector() {
 
             // Demander la permission Dhizuku si disponible et non accordée
             if (DhizukuApi.isAvailable && !DhizukuApi.isPermissionGranted) {
-                val activity = context.findActivity()
+                val activity = context.findActivity() // fonction locale définie plus bas
                 DhizukuApi.requestPermission(activity) { granted ->
                     scope.launch {
                         val message = if (granted) {
@@ -145,7 +146,7 @@ private fun InstallMethodSelector() {
                     snackbarHost.showSnackbar("Dhizuku n'est pas installé ou disponible")
                 }
             } else {
-                // Déjà accordé, on peut afficher un message si souhaité
+                // Déjà accordé
                 scope.launch {
                     snackbarHost.showSnackbar("Dhizuku déjà autorisé")
                 }
@@ -345,4 +346,14 @@ private fun DetailPatchLogs() {
         icon = Icons.Outlined.BugReport,
         title = stringResource(R.string.settings_detail_patch_logs)
     )
+}
+
+// Fonction utilitaire locale pour récupérer l'Activity depuis un Context
+private fun Context.findActivity(): Activity {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    throw IllegalStateException("No Activity found")
 }

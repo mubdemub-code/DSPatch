@@ -26,22 +26,34 @@ import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import kotlinx.coroutines.launch
 import org.lsposed.lspatch.R
+import org.lsposed.lspatch.LSPApplication
 import org.lsposed.lspatch.config.Configs
 import org.lsposed.lspatch.config.MyKeyStore
 import org.lsposed.lspatch.ui.component.AnywhereDropdown
 import org.lsposed.lspatch.ui.component.CenterTopBar
 import org.lsposed.lspatch.ui.component.settings.SettingsItem
 import org.lsposed.lspatch.ui.component.settings.SettingsSwitch
+import org.lsposed.lspatch.util.DhizukuApi
+import org.lsposed.lspatch.util.ShizukuApi
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+
+// SharedPreferences key for install method
+private const val PREF_INSTALL_METHOD = "install_method"
+
+// Possible values
+private const val INSTALL_AUTO = "AUTO"
+private const val INSTALL_SHIZUKU = "SHIZUKU"
+private const val INSTALL_DHIZUKU = "DHIZUKU"
+private const val INSTALL_ROOT = "ROOT"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination
 @Composable
 fun SettingsScreen() {
     Scaffold(
-        topBar = { CenterTopBar(stringResource(BottomBarDestination.Settings.label)) }
+        topBar = { CenterTopBar(stringResource(org.lsposed.lspatch.ui.page.BottomBarDestination.Settings.label)) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -49,8 +61,76 @@ fun SettingsScreen() {
                 .verticalScroll(rememberScrollState())
         ) {
             KeyStore()
+            InstallMethodSelector()
             DetailPatchLogs()
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InstallMethodSelector() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // prefs from global application
+    val prefs = lspApp.prefs
+
+    // current value from prefs (default AUTO)
+    var current by remember { mutableStateOf(prefs.getString(PREF_INSTALL_METHOD, INSTALL_AUTO) ?: INSTALL_AUTO) }
+    var expanded by remember { mutableStateOf(false) }
+
+    // local display text mapping
+    fun labelFor(value: String): String {
+        return when (value) {
+            INSTALL_SHIZUKU -> "Shizuku"
+            INSTALL_DHIZUKU -> "Dhizuku"
+            INSTALL_ROOT -> "Root"
+            else -> "Auto (Dhizuku → Shizuku → Root)"
+        }
+    }
+
+    AnywhereDropdown(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        onClick = { expanded = true },
+        surface = {
+            SettingsItem(
+                icon = Icons.Outlined.Ballot,
+                title = stringResource(R.string.settings_install_method),
+                desc = labelFor(current)
+            )
+        }
+    ) {
+        DropdownMenuItem(text = { Text("Auto (Dhizuku → Shizuku → Root)") }, onClick = {
+            current = INSTALL_AUTO
+            prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_AUTO).apply()
+            expanded = false
+        })
+        DropdownMenuItem(text = { Text("Shizuku (use Shizuku explicitly)") }, onClick = {
+            current = INSTALL_SHIZUKU
+            prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_SHIZUKU).apply()
+            expanded = false
+            // Optionally request permission immediately if binder available:
+            if (ShizukuApi.isBinderAvailable && !ShizukuApi.isPermissionGranted) {
+                try {
+                    // request from the UI thread; if you want a request code, adapt it
+                    rikka.shizuku.Shizuku.requestPermission(114514)
+                } catch (_: Throwable) { /* ignore if request not possible */ }
+            }
+        })
+        DropdownMenuItem(text = { Text("Dhizuku (use Dhizuku explicitly)") }, onClick = {
+            current = INSTALL_DHIZUKU
+            prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_DHIZUKU).apply()
+            expanded = false
+            // Optionally initialize Dhizuku SDK to prompt user in other parts of the app
+            try { DhizukuApi.init(context) } catch (_: Throwable) {}
+        })
+        DropdownMenuItem(text = { Text("Root (use root if available)") }, onClick = {
+            current = INSTALL_ROOT
+            prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_ROOT).apply()
+            expanded = false
+        })
     }
 }
 

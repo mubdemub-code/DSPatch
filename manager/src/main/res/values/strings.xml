@@ -4,6 +4,7 @@
     <string name="installing">Installing</string>
     <string name="uninstall">Uninstall</string>
     <string name="uninstalling">Uninstalling</string>
+<string name="settings_install_method">Install method</string>
     <string name="copy_error">Copy error</string>
     <string name="apps">Apps</string>
     <string name="modules">Modules</string>

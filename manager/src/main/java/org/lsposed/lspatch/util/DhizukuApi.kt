@@ -2,19 +2,18 @@ package org.lsposed.lspatch.util
 
 import android.content.ComponentName
 import android.content.Context
-import android.content.ServiceConnection
 import android.content.Intent
+import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.Looper
 import android.os.Handler
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.runBlocking
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.runBlocking
 import org.lsposed.lspatch.IDhizukuService
-import java.util.concurrent.TimeUnit
 
 /**
  * DhizukuApi - thin wrapper to:
@@ -43,7 +42,7 @@ object DhizukuApi {
         try {
             val clazz = Class.forName("com.rosan.dhizuku.api.Dhizuku")
             // Dhizuku.init(context) -> boolean
-            val mInit = clazz.getMethod("init", android.content.Context::class.java)
+            val mInit = clazz.getMethod("init", Context::class.java)
             val initOk = (mInit.invoke(null, context) as? Boolean) ?: false
             isAvailable = true
             // Dhizuku.isPermissionGranted()
@@ -53,6 +52,32 @@ object DhizukuApi {
             // SDK absent or reflection failed
             isAvailable = false
             isPermissionGranted = false
+        }
+    }
+
+    /**
+     * Demande la permission à Dhizuku.
+     * Appelé depuis l'interface (SettingsScreen).
+     */
+    fun requestPermission(activity: android.app.Activity, callback: (Boolean) -> Unit) {
+        try {
+            val clazz = Class.forName("com.rosan.dhizuku.api.Dhizuku")
+            val mRequest = clazz.getMethod(
+                "requestPermission",
+                com.rosan.dhizuku.api.DhizukuRequestPermissionCallback::class.java
+            )
+
+            // Création du callback via le SDK (réflexion)
+            val proxy = com.rosan.dhizuku.api.DhizukuRequestPermissionCallback { _, resultCode ->
+                val granted = resultCode == android.content.pm.PackageManager.PERMISSION_GRANTED
+                isPermissionGranted = granted
+                callback(granted)
+            }
+
+            mRequest.invoke(null, proxy)
+        } catch (t: Throwable) {
+            t.printStackTrace()
+            callback(false)
         }
     }
 
@@ -69,7 +94,7 @@ object DhizukuApi {
         }
 
         // bind to local DhizukuService (in this package)
-        val intent = android.content.Intent().apply {
+        val intent = Intent().apply {
             component = ComponentName(context.packageName, "org.lsposed.lspatch.DhizukuService")
         }
 
@@ -145,7 +170,7 @@ object DhizukuApi {
             return "ERROR: Dhizuku not available or permission not granted."
         }
 
-        val intent = android.content.Intent().apply {
+        val intent = Intent().apply {
             component = ComponentName(context.packageName, "org.lsposed.lspatch.DhizukuService")
         }
 

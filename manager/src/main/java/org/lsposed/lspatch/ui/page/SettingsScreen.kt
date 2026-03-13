@@ -33,6 +33,7 @@ import org.lsposed.lspatch.ui.component.AnywhereDropdown
 import org.lsposed.lspatch.ui.component.CenterTopBar
 import org.lsposed.lspatch.ui.component.settings.SettingsItem
 import org.lsposed.lspatch.ui.component.settings.SettingsSwitch
+import org.lsposed.lspatch.lspApp
 import org.lsposed.lspatch.util.DhizukuApi
 import org.lsposed.lspatch.util.ShizukuApi
 import java.io.IOException

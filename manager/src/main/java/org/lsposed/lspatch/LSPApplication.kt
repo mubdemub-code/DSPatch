@@ -11,7 +11,7 @@ import org.lsposed.lspatch.manager.AppBroadcastReceiver
 import org.lsposed.lspatch.util.LSPPackageManager
 import org.lsposed.lspatch.util.ShizukuApi
 import java.io.File
-
+import com.rosan.dhizuku.api.Dhizuku
 lateinit var lspApp: LSPApplication
 
 class LSPApplication : Application() {
@@ -22,14 +22,28 @@ class LSPApplication : Application() {
     val globalScope = CoroutineScope(Dispatchers.Default)
 
     override fun onCreate() {
-        super.onCreate()
-        HiddenApiBypass.addHiddenApiExemptions("")
-        lspApp = this
-        filesDir.mkdir()
-        tmpApkDir = cacheDir.resolve("apk").also { it.mkdir() }
-        prefs = lspApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        ShizukuApi.init(this)
-        AppBroadcastReceiver.register(this)
-        globalScope.launch { LSPPackageManager.fetchAppList() }
+    super.onCreate()
+
+    HiddenApiBypass.addHiddenApiExemptions("")
+
+    lspApp = this
+    filesDir.mkdir()
+
+    tmpApkDir = cacheDir.resolve("apk").also { it.mkdir() }
+
+    prefs = lspApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    // Shizuku init
+    ShizukuApi.init(this)
+
+    // Dhizuku init
+    try {
+        com.rosan.dhizuku.api.Dhizuku.init(this)
+    } catch (_: Throwable) {}
+
+    AppBroadcastReceiver.register(this)
+
+    globalScope.launch {
+        LSPPackageManager.fetchAppList()
     }
 }

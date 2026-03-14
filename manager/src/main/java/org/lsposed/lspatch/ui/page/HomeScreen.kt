@@ -46,25 +46,33 @@ import rikka.shizuku.Shizuku
 @Composable
 fun HomeScreen(navigator: DestinationsNavigator) {
 
+    // preserve intent-handled state across recompositions
     var isIntentLaunched by rememberSaveable { mutableStateOf(false) }
 
-    val activity = LocalContext.current as Activity
-    val intent = activity.intent
+    val context = LocalContext.current
+    val activity = (context as? Activity)
+    val intent = activity?.intent
 
+    // Ensure Dhizuku is probed when screen appears
     LaunchedEffect(Unit) {
-        if (!isIntentLaunched &&
+        try {
+            DhizukuApi.init(context)
+        } catch (t: Throwable) {
+            // ignore - DhizukuApi.init is best-effort and does reflection
+        }
+    }
+
+    // Handle incoming install intent (same logic as before)
+    LaunchedEffect(Unit) {
+        if (!isIntentLaunched && intent != null &&
             intent.action == Intent.ACTION_VIEW &&
             intent.hasCategory(Intent.CATEGORY_DEFAULT) &&
             intent.type == "application/vnd.android.package-archive"
         ) {
-
             isIntentLaunched = true
-
             val uri = intent.data
-
             if (uri != null) {
                 navigator.navigate(ManageScreenDestination)
-
                 navigator.navigate(
                     NewPatchScreenDestination(
                         id = ACTION_INTENT_INSTALL,
@@ -89,6 +97,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
 
             ShizukuCard()
 
+            // Dhizuku card now interactive and shows status
             DhizukuCard()
 
             InfoCard()
@@ -96,7 +105,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             SupportCard()
 
             Spacer(Modifier)
-
         }
     }
 }
@@ -134,7 +142,11 @@ private fun ShizukuCard() {
                 .fillMaxWidth()
                 .clickable {
                     if (ShizukuApi.isBinderAvailable && !ShizukuApi.isPermissionGranted) {
-                        Shizuku.requestPermission(114514)
+                        try {
+                            Shizuku.requestPermission(114514)
+                        } catch (_: Throwable) {
+                            // best-effort: some Shizuku versions or environments may throw
+                        }
                     }
                 }
                 .padding(24.dp),
@@ -156,7 +168,7 @@ private fun ShizukuCard() {
                     Spacer(Modifier.height(4.dp))
 
                     Text(
-                        text = "API " + Shizuku.getVersion(),
+                        text = "API " + runCatching { Shizuku.getVersion() }.getOrNull().toString(),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -188,7 +200,11 @@ private fun ShizukuCard() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DhizukuCard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHost = LocalSnackbarHost.current
 
+    // Card color depends on permission status
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(
             containerColor =
@@ -202,6 +218,39 @@ private fun DhizukuCard() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable {
+                    // On click: try request permission if available and not yet granted
+                    try {
+                        // Init/probe if not done
+                        try { DhizukuApi.init(context) } catch (_: Throwable) {}
+
+                        if (!DhizukuApi.isAvailable) {
+                            scope.launch {
+                                snackbarHost.showSnackbar("Dhizuku n'est pas installé ou indisponible")
+                            }
+                            return@clickable
+                        }
+
+                        if (!DhizukuApi.isPermissionGranted) {
+                            // find the current Activity (best-effort)
+                            val activity = findActivityFromContext(context)
+                            DhizukuApi.requestPermission(activity) { granted ->
+                                scope.launch {
+                                    val message = if (granted) "Permission Dhizuku accordée" else "Permission Dhizuku refusée"
+                                    snackbarHost.showSnackbar(message)
+                                }
+                            }
+                        } else {
+                            scope.launch {
+                                snackbarHost.showSnackbar("Dhizuku déjà autorisé")
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        scope.launch {
+                            snackbarHost.showSnackbar("Erreur lors de la demande Dhizuku")
+                        }
+                    }
+                }
                 .padding(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -241,7 +290,7 @@ private fun DhizukuCard() {
                     Spacer(Modifier.height(4.dp))
 
                     Text(
-                        text = "Dhizuku permission not granted",
+                        text = if (DhizukuApi.isAvailable) "Tap to request Dhizuku permission" else "Dhizuku not detected",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -251,6 +300,17 @@ private fun DhizukuCard() {
     }
 }
 
+// safe Activity resolver (best-effort)
+private fun findActivityFromContext(context: Context): Activity? {
+    var ctx = context
+    while (true) {
+        if (ctx is Activity) return ctx
+        val base = (ctx as? android.content.ContextWrapper)?.baseContext ?: break
+        ctx = base
+    }
+    return null
+}
+
 private val apiVersion =
     if (Build.VERSION.PREVIEW_SDK_INT != 0)
         "${Build.VERSION.CODENAME} Preview (API ${Build.VERSION.PREVIEW_SDK_INT})"
@@ -258,40 +318,32 @@ private val apiVersion =
         "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
 
 private val device = buildString {
-
     append(Build.MANUFACTURER.replaceFirstChar { it.uppercase() })
-
     if (Build.BRAND != Build.MANUFACTURER) {
         append(" " + Build.BRAND.replaceFirstChar { it.uppercase() })
     }
-
     append(" " + Build.MODEL)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InfoCard() {
-
     val context = LocalContext.current
     val snackbarHost = LocalSnackbarHost.current
     val scope = rememberCoroutineScope()
 
     ElevatedCard {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
         ) {
-
             val contents = StringBuilder()
 
             val infoCardContent: @Composable (Pair<String, String>) -> Unit = { texts ->
-
                 contents.appendLine(texts.first)
                 contents.appendLine(texts.second)
                 contents.appendLine()
-
                 Text(text = texts.first, style = MaterialTheme.typography.bodyLarge)
                 Text(text = texts.second, style = MaterialTheme.typography.bodyMedium)
             }
@@ -329,13 +381,10 @@ private fun InfoCard() {
             TextButton(
                 modifier = Modifier.align(Alignment.End),
                 onClick = {
-
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-
                     cm.setPrimaryClip(
                         ClipData.newPlainText("LSPatch", contents.toString())
                     )
-
                     scope.launch {
                         snackbarHost.showSnackbar(copiedMessage)
                     }
@@ -351,27 +400,22 @@ private fun InfoCard() {
 @Preview
 @Composable
 private fun SupportCard() {
-
     ElevatedCard {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
         ) {
-
             Text(
                 text = stringResource(R.string.home_support),
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleMedium
             )
-
             Text(
                 modifier = Modifier.padding(vertical = 8.dp),
                 text = stringResource(R.string.home_description),
                 style = MaterialTheme.typography.bodyMedium
             )
-
             HtmlText(
                 stringResource(
                     R.string.home_view_source_code,

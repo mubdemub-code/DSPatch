@@ -3,6 +3,7 @@ package org.lsposed.lspatch.ui.page
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -78,14 +79,23 @@ private fun InstallMethodSelector() {
     val scope = rememberCoroutineScope()
     val snackbarHost = LocalSnackbarHost.current
 
+    // init Dhizuku detection once when this composable appears
+    LaunchedEffect(Unit) {
+        try {
+            DhizukuApi.init(context)
+        } catch (t: Throwable) {
+            Log.w("SettingsScreen", "DhizukuApi.init failed", t)
+        }
+    }
+
     // prefs from global application
     val prefs = lspApp.prefs
 
-    // current value from prefs (default AUTO)
-    var current by remember { mutableStateOf(prefs.getString(PREF_INSTALL_METHOD, INSTALL_AUTO) ?: INSTALL_AUTO) }
+    // current value from prefs (default AUTO) — persisted across recompositions
+    var current by rememberSaveable { mutableStateOf(prefs.getString(PREF_INSTALL_METHOD, INSTALL_AUTO) ?: INSTALL_AUTO) }
     var expanded by remember { mutableStateOf(false) }
 
-    // local display text mapping
+    // local display text mapping (use stringResource if you have localized strings)
     fun labelFor(value: String): String {
         return when (value) {
             INSTALL_SHIZUKU -> "Shizuku"
@@ -112,51 +122,87 @@ private fun InstallMethodSelector() {
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_AUTO).apply()
             expanded = false
         })
+
         DropdownMenuItem(text = { Text("Shizuku (use Shizuku explicitly)") }, onClick = {
             current = INSTALL_SHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_SHIZUKU).apply()
             expanded = false
             // Demander la permission Shizuku si nécessaire
-            if (ShizukuApi.isBinderAvailable && !ShizukuApi.isPermissionGranted) {
-                try {
-                    rikka.shizuku.Shizuku.requestPermission(114514)
-                } catch (_: Throwable) { /* ignore if request not possible */ }
+            try {
+                if (ShizukuApi.isBinderAvailable && !ShizukuApi.isPermissionGranted) {
+                    try {
+                        rikka.shizuku.Shizuku.requestPermission(114514)
+                    } catch (e: Throwable) {
+                        Log.w("SettingsScreen", "Shizuku.requestPermission failed", e)
+                        scope.launch { snackbarHost.showSnackbar("Impossible de demander la permission Shizuku") }
+                    }
+                } else {
+                    scope.launch { snackbarHost.showSnackbar("Shizuku déjà autorisé ou non disponible") }
+                }
+            } catch (t: Throwable) {
+                Log.e("SettingsScreen", "Error while requesting Shizuku permission", t)
+                scope.launch { snackbarHost.showSnackbar("Erreur lors de la demande Shizuku") }
             }
         })
+
         DropdownMenuItem(text = { Text("Dhizuku (use Dhizuku explicitly)") }, onClick = {
             current = INSTALL_DHIZUKU
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_DHIZUKU).apply()
             expanded = false
 
+            // Ensure Dhizuku has been probed/initialized before requesting permission
+            try {
+                DhizukuApi.init(context)
+            } catch (t: Throwable) {
+                Log.w("SettingsScreen", "DhizukuApi.init failed", t)
+            }
+
             // Demander la permission Dhizuku si disponible et non accordée
-            if (DhizukuApi.isAvailable && !DhizukuApi.isPermissionGranted) {
-                val activity = context.findActivity() // fonction locale définie plus bas
-                DhizukuApi.requestPermission(activity) { granted ->
+            try {
+                // try to find an Activity safely
+                val activity = try {
+                    context.findActivity()
+                } catch (e: Throwable) {
+                    null
+                }
+
+                if (!DhizukuApi.isAvailable) {
                     scope.launch {
-                        val message = if (granted) {
-                            "Permission Dhizuku accordée"
-                        } else {
-                            "Permission Dhizuku refusée"
+                        snackbarHost.showSnackbar("Dhizuku n'est pas installé ou disponible")
+                    }
+                    return@DropdownMenuItem
+                }
+
+                if (!DhizukuApi.isPermissionGranted) {
+                    DhizukuApi.requestPermission(activity) { granted ->
+                        scope.launch {
+                            val message = if (granted) {
+                                "Permission Dhizuku accordée"
+                            } else {
+                                "Permission Dhizuku refusée"
+                            }
+                            snackbarHost.showSnackbar(message)
                         }
-                        snackbarHost.showSnackbar(message)
+                    }
+                } else {
+                    scope.launch {
+                        snackbarHost.showSnackbar("Dhizuku déjà autorisé")
                     }
                 }
-            } else if (!DhizukuApi.isAvailable) {
+            } catch (t: Throwable) {
+                Log.e("SettingsScreen", "Error when requesting Dhizuku permission", t)
                 scope.launch {
-                    snackbarHost.showSnackbar("Dhizuku n'est pas installé ou disponible")
-                }
-            } else {
-                // Déjà accordé
-                scope.launch {
-                    snackbarHost.showSnackbar("Dhizuku déjà autorisé")
+                    snackbarHost.showSnackbar("Erreur lors de la demande Dhizuku")
                 }
             }
         })
+
         DropdownMenuItem(text = { Text("Root (use root if available)") }, onClick = {
             current = INSTALL_ROOT
             prefs.edit().putString(PREF_INSTALL_METHOD, INSTALL_ROOT).apply()
             expanded = false
-            // Pour root, pas de demande de permission particulière
+            // For root no runtime permission request here
+            scope.launch { snackbarHost.showSnackbar("Mode Root sélectionné (vérifier disponibilité)") }
         })
     }
 }
@@ -349,11 +395,11 @@ private fun DetailPatchLogs() {
 }
 
 // Fonction utilitaire locale pour récupérer l'Activity depuis un Context
-private fun Context.findActivity(): Activity {
+private fun Context.findActivity(): Activity? {
     var context = this
     while (context is ContextWrapper) {
         if (context is Activity) return context
         context = context.baseContext
     }
-    throw IllegalStateException("No Activity found")
+    return null
 }

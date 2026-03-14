@@ -1,78 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    package="org.lsposed.lspatch">
 
-    <uses-permission
-        android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
 
-    <!-- Si tu veux utiliser le SDK Dhizuku officiel et que celui-ci requiert une permission spéciale,
-         ajoute-la ci-dessous (exemple placeholder). Remplace par la permission exacte du SDK si nécessaire. -->
-    <uses-permission android:name="com.rosan.dhizuku.permission.API" tools:ignore="ProtectedPermissions" />
+    <!-- Dhizuku -->
+    <uses-permission android:name="com.rosan.dhizuku.permission.BIND_DHIZUKU_SERVICE"/>
 
     <application
         android:name=".LSPApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:supportsRtl="true"
         android:theme="@style/Theme.Material3.DayNight.NoActionBar">
 
         <activity
             android:name=".ui.activity.MainActivity"
             android:exported="true">
+
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="file" />
-                <data android:scheme="content" />
-                <data android:mimeType="application/vnd.android.package-archive" />
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="file"/>
+                <data android:scheme="content"/>
+                <data android:mimeType="application/vnd.android.package-archive"/>
             </intent-filter>
+
         </activity>
 
-        <!-- Service original du manager (laisse tel quel) -->
         <service
             android:name=".manager.ModuleService"
-            android:exported="true" />
+            android:exported="true"/>
 
-        <!-- Shizuku provider (déjà présent) -->
+        <!-- Shizuku -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="org.lsposed.lspatch.shizuku"
-            android:enabled="true"
-            android:exported="true"
-            android:multiprocess="false"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+            android:authorities="${applicationId}.shizuku"
+            android:exported="false"
+            android:multiprocess="false"/>
 
-        <!-- Optional: déclaration du service Shizuku local (déclare-le si tu fournis ShizukuService.kt
-             et que Shizuku doit binder explicitement sur ce service). 
-             Si tu préfères garder le service non-exporté (appel local only), mets exported="false". -->
         <service
             android:name=".ShizukuService"
-            android:exported="true"
-            android:permission="android.permission.BIND_REMOTE_INTERFACE">
-            <!-- Sécurité recommandée : remplace android:permission par une permission custom avec
-                 protection="signature" ou retire exported si le service n'a pas besoin d'être bindé
-                 par d'autres paquets. -->
-        </service>
+            android:exported="false"/>
 
-        <!-- Dhizuku service : expose l'AIDL IDhizukuService pour installer via Dhizuku.
-             IMPORTANT : pour la sécurité, protège ce service avant publication.
-             Options conseillées :
-               - android:exported="false" si l'app bind uniquement depuis elle-même
-               - si tu dois exporter, ajoute android:permission="com.example.permission.DHIZUKU_BIND"
-                 et déclare cette permission en protection signature
-        -->
+        <!-- Dhizuku -->
         <service
             android:name=".DhizukuService"
-            android:exported="true">
-            <!-- Pour la prod : remplacer exported="true" par exported="false" ou ajouter android:permission avec protection signature. -->
-        </service>
+            android:exported="true"
+            android:permission="com.rosan.dhizuku.permission.BIND_DHIZUKU_SERVICE"/>
 
     </application>
 
